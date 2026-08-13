@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import { CATEGORY_LABELS, type GradeWeights } from '@/lib/grader-types'
+import { CATEGORY_LABELS, CATEGORY_ORDER, type GradeWeights } from '@/lib/grader-types'
 import { BUSINESS_PROFILE_LIST, type BusinessProfileId } from '@/lib/business-profiles'
 
 const AGENT_NAME = 'Brent Pleeter'
@@ -225,7 +225,7 @@ export default function Home() {
             </div>
 
             <div className="mt-6 space-y-3">
-              {(Object.keys(result.categoryScores) as Array<keyof GradeWeights>).map((key) => (
+              {CATEGORY_ORDER.map((key) => (
                 <div key={key} className="flex items-center gap-3 text-sm">
                   <div className="w-44 text-gray-600">{CATEGORY_LABELS[key]}</div>
                   <div className="flex-1 h-2 bg-domain-tint rounded-full overflow-hidden">

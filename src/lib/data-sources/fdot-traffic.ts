@@ -80,6 +80,11 @@ export async function getNearbyTrafficCounts(
         distanceMiles = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
       }
 
+      // FDOT's API sometimes returns literal placeholder strings ("N/A",
+      // "NONE", "", whitespace) instead of a real null for missing
+      // cross-street data — normalize those to null so downstream
+      // formatting (grader.ts, pdf-template.ts) doesn't render
+      // "Pine Ridge Rd to N/A".
       return {
         aadt,
         // NOTE: FDOT's ROADWAY field is a coded route ID (e.g. "10190000"),
@@ -87,8 +92,8 @@ export async function getNearbyTrafficCounts(
         // but never shown to end users. DESC_FRM/DESC_TO describe the
         // count-segment's cross streets and are what's actually readable.
         roadway: attrs.ROADWAY ?? attrs.RDWYID ?? attrs.COSITE ?? null,
-        descFrom: attrs.DESC_FRM ?? null,
-        descTo: attrs.DESC_TO ?? null,
+        descFrom: cleanDesc(attrs.DESC_FRM),
+        descTo: cleanDesc(attrs.DESC_TO),
         distanceMiles: Math.round(distanceMiles * 100) / 100,
       }
     })
@@ -96,4 +101,13 @@ export async function getNearbyTrafficCounts(
     .sort((a, b) => b.aadt - a.aadt)
 
   return counts
+}
+
+const PLACEHOLDER_DESC = new Set(['n/a', 'na', 'none', 'null', 'unknown', '-'])
+
+function cleanDesc(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (!trimmed || PLACEHOLDER_DESC.has(trimmed.toLowerCase())) return null
+  return trimmed
 }

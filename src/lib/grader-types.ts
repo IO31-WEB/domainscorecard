@@ -46,6 +46,26 @@ export const CATEGORY_LABELS: Record<keyof GradeWeights, string> = {
   crime: 'Safety Context',
 }
 
+/**
+ * Fixed display order for the category breakdown. `categoryScores` is
+ * stored as Postgres `jsonb`, and jsonb does NOT preserve object key
+ * insertion order the way `json` or plain JS objects do — Postgres
+ * reorders keys internally for storage/lookup efficiency. Anything that
+ * renders categoryScores after reading it back from the DB (the results
+ * page, the PDF template) must iterate over THIS array rather than
+ * `Object.keys(categoryScores)`, or the category order will vary
+ * unpredictably between "just generated" and "loaded from cache".
+ */
+export const CATEGORY_ORDER: Array<keyof GradeWeights> = [
+  'traffic',
+  'consumerSpend',
+  'demographics',
+  'retailSynergy',
+  'competitiveSaturation',
+  'floodRisk',
+  'crime',
+]
+
 const GRADE_THRESHOLDS: Array<{ min: number; grade: string }> = [
   { min: 97, grade: 'A+' }, { min: 93, grade: 'A' }, { min: 90, grade: 'A-' },
   { min: 87, grade: 'B+' }, { min: 83, grade: 'B' }, { min: 80, grade: 'B-' },

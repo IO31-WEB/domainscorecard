@@ -19,6 +19,7 @@ import {
   type GradeWeights,
   DEFAULT_WEIGHTS,
   CATEGORY_LABELS,
+  CATEGORY_ORDER,
   scoreToGrade,
 } from './grader-types'
 import {
@@ -34,7 +35,7 @@ import {
 // keep working. Client Components should import these directly from
 // './grader-types' or './business-profiles' instead, to avoid bundling the
 // Anthropic SDK below.
-export { type GradeWeights, DEFAULT_WEIGHTS, CATEGORY_LABELS, scoreToGrade }
+export { type GradeWeights, DEFAULT_WEIGHTS, CATEGORY_LABELS, CATEGORY_ORDER, scoreToGrade }
 export {
   type BusinessProfile,
   type BusinessProfileId,
@@ -167,11 +168,22 @@ export function scoreRetailSynergy(
   profile: BusinessProfile
 ): { score: number; hasData: boolean; anchors: ScoredAnchor[] } {
   if (!retailers.length) return { score: 50, hasData: false, anchors: [] }
-  if (!profile.synergyCategories.length) return { score: 50, hasData: false, anchors: [] }
+
+  // A category can't validate demand for a use AND directly compete with
+  // that same use at the same time — if it's this profile's own
+  // competitor category (e.g. "fast_casual" for a Full-Service Restaurant
+  // profile), exclude it from synergy scoring even though it's part of
+  // the broader FOOD_SYNERGY set shared across profiles. Without this, the
+  // same nearby business (e.g. a sushi restaurant) was being counted twice
+  // in opposite directions: once as a synergy bonus, once as a saturation
+  // penalty, and shown in both lists on the report.
+  const competitorCategories = new Set(profile.competitorCategories)
+  const synergyCategories = profile.synergyCategories.filter((c) => !competitorCategories.has(c))
+  if (!synergyCategories.length) return { score: 50, hasData: false, anchors: [] }
 
   let score = 50
   const anchors: ScoredAnchor[] = []
-  const synergy = new Set(profile.synergyCategories)
+  const synergy = new Set(synergyCategories)
 
   for (const r of retailers) {
     if (!synergy.has(r.category)) continue
@@ -336,6 +348,15 @@ export async function generateGradeNarrative(opts: {
   costarFilename?: string | null
 }): Promise<GradeNarrative> {
   const topTraffic = opts.trafficCounts.slice(0, 2)
+  const PLACEHOLDER = new Set(['n/a', 'na', 'none', 'null', 'unknown', '-'])
+  const usable = (v: string | null | undefined): v is string => !!v && !PLACEHOLDER.has(v.trim().toLowerCase())
+  const describeTrafficSegment = (t: (typeof topTraffic)[number]): string => {
+    const from = usable(t.descFrom) ? t.descFrom : null
+    const to = usable(t.descTo) ? t.descTo : null
+    if (from && to) return `${from} to ${to}`
+    if (from) return `near ${from}`
+    return 'nearby segment'
+  }
 
   const costarSection = opts.costarText
     ? `\n\nThe agent also attached a CoStar export (${opts.costarFilename ?? 'file'}) for this property or its market. Treat this as licensed, paid market data that is MORE authoritative than the free public-data estimates above wherever the two overlap (e.g. comps, cap rates, rent/SF, vacancy, absorption). Pull out the figures from it that are actually relevant to this specific address and business use — ignore boilerplate, headers, and unrelated comps. Raw extracted content follows, truncated:\n"""\n${opts.costarText}\n"""`
@@ -352,7 +373,7 @@ Intended use: ${opts.businessProfile.label} (${opts.businessProfile.description}
 Overall Site Quality Score for this use: ${opts.overallGrade} (${opts.overallScore.toFixed(1)}/100)
 
 Category scores:
-- Traffic: ${opts.categoryScores.traffic.toFixed(1)}/100 — ${topTraffic.map(t => `${t.descFrom && t.descTo ? `${t.descFrom} to ${t.descTo}` : 'nearby segment'} (${t.aadt.toLocaleString()} AADT)`).join(', ') || 'no traffic count data available'}
+- Traffic: ${opts.categoryScores.traffic.toFixed(1)}/100 — ${topTraffic.map(t => `${describeTrafficSegment(t)} (${t.aadt.toLocaleString()} AADT)`).join(', ') || 'no traffic count data available'}
 - Estimated spending power: ${opts.categoryScores.consumerSpend.toFixed(1)}/100${opts.spendEstimate ? ` — est. $${(opts.spendEstimate.estimatedTradeAreaSpendTotal / 1_000_000).toFixed(0)}M annual trade-area spend (estimated, not reported)` : ''}
 - Demographics: ${opts.categoryScores.demographics.toFixed(1)}/100${opts.demographics ? ` — ${opts.demographics.population.toLocaleString()} pop, ${opts.demographics.populationGrowth5yr}% 5yr growth, median income $${opts.demographics.medianHouseholdIncome.toLocaleString()}, median age ${opts.demographics.medianAge}` : ''}
 - Retail synergy (nearby businesses that validate demand for this specific use): ${opts.categoryScores.retailSynergy.toFixed(1)}/100 — ${opts.synergyAnchors.length ? opts.synergyAnchors.map(a => `${a.name} (${a.distanceMiles}mi)`).join(', ') : 'no demand-validating businesses detected nearby'}

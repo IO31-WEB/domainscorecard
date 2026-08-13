@@ -9,7 +9,7 @@
  */
 
 import type { GradeWeights } from './grader'
-import { CATEGORY_LABELS, scoreToGrade } from './grader'
+import { CATEGORY_LABELS, CATEGORY_ORDER, scoreToGrade } from './grader'
 import { LOGO_DATA_URI } from './logo'
 
 const AGENT_NAME = 'Brent Pleeter'
@@ -110,7 +110,7 @@ export function renderReportHtml(data: TemplateData): string {
     generatedDate, rawData, narrative, mapImageDataUri, hasCostarData, costarFilename,
   } = data
 
-  const categoryRows = (Object.keys(categoryScores) as Array<keyof GradeWeights>)
+  const categoryRows = CATEGORY_ORDER
     .map((key) => {
       const score = categoryScores[key]
       const color = gradeColor(scoreToGrade(score))
@@ -139,9 +139,19 @@ export function renderReportHtml(data: TemplateData): string {
     </div>`
     : `<p class="muted">Demographic data unavailable for this location.</p>`
 
+  // Defense-in-depth: fdot-traffic.ts already normalizes literal
+  // placeholder strings ("N/A", "None", etc.) to null at the source, but
+  // the template shouldn't assume every caller/data source upstream does
+  // the same — a bare "N/A" leaking through here would render as
+  // "Pine Ridge Rd to N/A", which is worse than just omitting it.
+  const isUsableDesc = (v: string | null | undefined): v is string =>
+    !!v && !['n/a', 'na', 'none', 'null', 'unknown', '-'].includes(v.trim().toLowerCase())
+
   const describeSegment = (t: TemplateData['rawData']['trafficCounts'][number]): string => {
-    if (t.descFrom && t.descTo) return `${t.descFrom} to ${t.descTo}`
-    if (t.descFrom) return `near ${t.descFrom}`
+    const from = isUsableDesc(t.descFrom) ? t.descFrom : null
+    const to = isUsableDesc(t.descTo) ? t.descTo : null
+    if (from && to) return `${from} to ${to}`
+    if (from) return `near ${from}`
     return 'nearby roadway segment'
   }
 
@@ -255,6 +265,17 @@ export function renderReportHtml(data: TemplateData): string {
     color: var(--ink);
     margin: 0;
     background: var(--bg);
+    /* Chromium's print-to-PDF text layer has a known issue where OpenType
+       ligature glyphs (Inter substitutes "ff", "fi", "ffi" etc. with a
+       single glyph via the 'liga' feature) can lose their ToUnicode
+       mapping in the exported PDF — the word renders correctly on screen
+       but the underlying PDF text is missing those letters (e.g.
+       "Sheriff's" -> "Sheri's"), which breaks copy-paste, search, and
+       accessibility. Disabling ligatures site-wide avoids the whole class
+       of bug at a cost of zero visible difference in a report like this. */
+    font-variant-ligatures: none;
+    -webkit-font-feature-settings: "liga" 0, "clig" 0;
+    font-feature-settings: "liga" 0, "clig" 0;
   }
   .sans { font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif; }
   @page { margin-top: 0; }

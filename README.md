@@ -7,7 +7,7 @@ scored report → he downloads a polished, Domain Realty-branded PDF.
 Single-user internal tool — no lead capture, no email gate, sits behind a
 simple password.
 
-## What's new in this version (vs. the original CRES build)
+## What's new in this version 
 
 - **Domain Realty branding** — logo, agent name, and a blue/white color
   palette (sampled from the Domain Realty logo) throughout the web UI and
